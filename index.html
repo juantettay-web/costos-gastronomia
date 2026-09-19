@@ -43,6 +43,7 @@
       background: transparent; color: var(--ink); font-weight: 750; cursor: pointer;
     }
     .restart:hover { background: var(--ink); color: white; }
+    .student-chip { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 12px; border-radius: 999px; background: var(--basil-soft); color: var(--basil); font-size: .86rem; font-weight: 800; }
 
     .scoreboard {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden;
@@ -104,6 +105,20 @@
     .finish p { color: var(--muted); line-height: 1.55; }
     .primary { padding: 12px 20px; border: 0; border-radius: 999px; background: var(--tomato); color: white; font-weight: 850; cursor: pointer; }
     .primary:hover { background: var(--tomato-dark); }
+    .start {
+      position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px;
+      background: rgba(24,32,29,.7); backdrop-filter: blur(8px);
+    }
+    .start.hidden { display: none; }
+    .start-card { width: min(520px, 100%); padding: 28px; border-radius: 26px; background: var(--paper); box-shadow: 0 30px 80px rgba(0,0,0,.3); }
+    .start-card h2 { margin: 0 0 8px; font-family: Georgia, serif; font-size: 2rem; }
+    .start-card > p { margin: 0 0 20px; color: var(--muted); line-height: 1.5; }
+    .field { display: grid; gap: 6px; margin-bottom: 14px; }
+    .field label { font-size: .86rem; font-weight: 800; }
+    .field input { width: 100%; padding: 12px 13px; border: 1px solid #bdb5a3; border-radius: 12px; background: white; color: var(--ink); font: inherit; }
+    .field input:focus { border-color: var(--basil); outline: 3px solid rgba(31,107,73,.16); }
+    .form-error { min-height: 20px; margin: 0 0 10px; color: var(--tomato-dark); font-size: .85rem; font-weight: 700; }
+    .send-status { min-height: 24px; margin: 14px 0 0; color: var(--basil); font-weight: 800; }
 
     @keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
     @media (max-width: 760px) {
@@ -126,6 +141,7 @@
         <p class="eyebrow">Actividad de aprendizaje</p>
         <h1>Costos a la carta</h1>
         <p class="intro">Relaciona cada término de costos gastronómicos con su definición. Arrastra una tarjeta hasta la definición correcta o selecciona ambos elementos.</p>
+        <div class="student-chip" id="studentChip" hidden></div>
       </div>
       <button class="restart" id="restartTop" type="button">↻ Nueva ronda</button>
     </header>
@@ -156,10 +172,27 @@
       <h2 id="finishTitle">¡Ronda completada!</h2>
       <p id="finishText"></p>
       <button class="primary" id="restartModal" type="button">Jugar otra ronda</button>
+      <p class="send-status" id="sendStatus" role="status" aria-live="polite"></p>
     </div>
   </div>
 
+  <div class="start" id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+    <form class="start-card" id="studentForm">
+      <p class="eyebrow">Antes de comenzar</p>
+      <h2 id="startTitle">Identifica tu resultado</h2>
+      <p>Estos datos se usarán únicamente para registrar tu desempeño en la actividad.</p>
+      <div class="field"><label for="studentName">Nombre completo</label><input id="studentName" name="name" autocomplete="name" required /></div>
+      <div class="field"><label for="studentGroup">Grupo</label><input id="studentGroup" name="group" required /></div>
+      <div class="field"><label for="studentEmail">Correo electrónico</label><input id="studentEmail" name="email" type="email" autocomplete="email" required /></div>
+      <p class="form-error" id="formError" role="alert"></p>
+      <button class="primary" type="submit">Comenzar actividad</button>
+    </form>
+  </div>
+
   <script>
+    // Pega aquí la URL de implementación que entrega Google Apps Script.
+    const RESULTS_ENDPOINT = 'PEGA_AQUI_LA_URL_DE_GOOGLE_APPS_SCRIPT';
+
     const pairs = [
       { id: 'fijo', term: 'Costo fijo', definition: 'Permanece estable aunque cambie el nivel de producción o de ventas, como el arriendo mensual del local.' },
       { id: 'variable', term: 'Costo variable', definition: 'Aumenta o disminuye según la cantidad de platos producidos, como los ingredientes utilizados.' },
@@ -171,7 +204,7 @@
       { id: 'merma', term: 'Merma', definition: 'Pérdida de peso, volumen o cantidad de un insumo durante su limpieza, almacenamiento o preparación.' }
     ];
 
-    const state = { selected: null, attempts: 0, matched: new Set(), toastTimer: null };
+    const state = { selected: null, attempts: 0, matched: new Set(), toastTimer: null, student: null, startedAt: null, roundId: null };
     const cards = document.querySelector('#cards');
     const definitions = document.querySelector('#definitions');
     const score = document.querySelector('#score');
@@ -180,6 +213,9 @@
     const toast = document.querySelector('#toast');
     const finish = document.querySelector('#finish');
     const finishText = document.querySelector('#finishText');
+    const sendStatus = document.querySelector('#sendStatus');
+    const start = document.querySelector('#start');
+    const studentChip = document.querySelector('#studentChip');
 
     function shuffle(list) {
       const copy = [...list];
@@ -192,6 +228,8 @@
 
     function render() {
       state.selected = null; state.attempts = 0; state.matched.clear(); finish.classList.remove('show');
+      state.startedAt = Date.now(); state.roundId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      sendStatus.textContent = '';
       cards.innerHTML = ''; definitions.innerHTML = '';
       shuffle(pairs).forEach(pair => {
         const button = document.createElement('button');
@@ -257,16 +295,78 @@
       state.toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1800);
     }
 
-    function showFinish() {
+    async function showFinish() {
       const accuracy = Math.round((pairs.length / Math.max(state.attempts, 1)) * 100);
       finishText.textContent = `Lograste ${pairs.length} aciertos en ${state.attempts} intentos. Precisión: ${accuracy}%.`;
       finish.classList.add('show');
       document.querySelector('#restartModal').focus();
+      await sendResult(accuracy);
     }
+
+    async function sendResult(accuracy) {
+      if (!state.student) return;
+      if (!RESULTS_ENDPOINT.startsWith('https://script.google.com/')) {
+        sendStatus.textContent = 'El registro de resultados aún no está configurado.';
+        sendStatus.style.color = 'var(--tomato-dark)';
+        return;
+      }
+      sendStatus.textContent = 'Enviando resultado…';
+      sendStatus.style.color = 'var(--muted)';
+      const payload = {
+        roundId: state.roundId,
+        name: state.student.name,
+        group: state.student.group,
+        email: state.student.email,
+        correct: pairs.length,
+        attempts: state.attempts,
+        accuracy,
+        durationSeconds: Math.round((Date.now() - state.startedAt) / 1000)
+      };
+      try {
+        await fetch(RESULTS_ENDPOINT, {
+          method: 'POST', mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        sendStatus.textContent = '✓ Resultado enviado correctamente';
+        sendStatus.style.color = 'var(--basil)';
+      } catch (error) {
+        sendStatus.textContent = 'No se pudo enviar el resultado. Informa a tu docente.';
+        sendStatus.style.color = 'var(--tomato-dark)';
+      }
+    }
+
+    document.querySelector('#studentForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const student = {
+        name: String(data.get('name')).trim(),
+        group: String(data.get('group')).trim(),
+        email: String(data.get('email')).trim().toLowerCase()
+      };
+      if (!student.name || !student.group || !student.email) {
+        document.querySelector('#formError').textContent = 'Completa todos los campos para continuar.';
+        return;
+      }
+      state.student = student;
+      localStorage.setItem('costosStudent', JSON.stringify(student));
+      studentChip.textContent = `${student.name} · ${student.group}`;
+      studentChip.hidden = false;
+      start.classList.add('hidden');
+      render();
+    });
 
     document.querySelector('#restartTop').addEventListener('click', render);
     document.querySelector('#restartModal').addEventListener('click', render);
-    render();
+    const savedStudent = localStorage.getItem('costosStudent');
+    if (savedStudent) {
+      try {
+        const saved = JSON.parse(savedStudent);
+        document.querySelector('#studentName').value = saved.name || '';
+        document.querySelector('#studentGroup').value = saved.group || '';
+        document.querySelector('#studentEmail').value = saved.email || '';
+      } catch (error) { localStorage.removeItem('costosStudent'); }
+    }
   </script>
 </body>
 </html>
