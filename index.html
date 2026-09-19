@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Actividad interactiva para relacionar conceptos de costos gastronómicos con sus definiciones." />
+  <title>Costos a la carta</title>
+  <style>
+    :root {
+      --ink: #18201d;
+      --muted: #66706b;
+      --paper: #fffdf7;
+      --cream: #f4efe1;
+      --tomato: #e54d2e;
+      --tomato-dark: #a82f1a;
+      --basil: #1f6b49;
+      --basil-soft: #dcefe5;
+      --mustard: #efb83f;
+      --line: #d9d3c3;
+      --shadow: 0 16px 44px rgba(43, 36, 22, .12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(239,184,63,.22), transparent 24rem),
+        radial-gradient(circle at 94% 4%, rgba(229,77,46,.16), transparent 22rem),
+        var(--cream);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button { font: inherit; }
+    .app { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 48px; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+    .eyebrow { margin: 0 0 4px; color: var(--tomato-dark); font-size: .82rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 3.7rem); line-height: .98; letter-spacing: -.045em; }
+    .intro { max-width: 660px; margin: 12px 0 0; color: var(--muted); font-size: 1rem; line-height: 1.55; }
+    .restart {
+      flex: none; padding: 11px 16px; border: 1px solid var(--ink); border-radius: 999px;
+      background: transparent; color: var(--ink); font-weight: 750; cursor: pointer;
+    }
+    .restart:hover { background: var(--ink); color: white; }
+
+    .scoreboard {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden;
+      margin-bottom: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--line); box-shadow: var(--shadow);
+    }
+    .metric { padding: 14px 18px; background: var(--paper); }
+    .metric span { display: block; color: var(--muted); font-size: .78rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 3px; font-family: Georgia, serif; font-size: 1.65rem; }
+
+    .board { display: grid; grid-template-columns: minmax(245px, .75fr) minmax(440px, 1.35fr); gap: 18px; align-items: start; }
+    .panel { border: 1px solid var(--line); border-radius: 24px; background: rgba(255,253,247,.93); box-shadow: var(--shadow); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 20px 14px; }
+    .panel-head h2 { margin: 0; font-size: 1rem; }
+    .panel-head span { color: var(--muted); font-size: .82rem; }
+    .cards, .definitions { display: grid; gap: 10px; padding: 0 14px 14px; }
+
+    .term-card {
+      position: relative; width: 100%; min-height: 64px; padding: 16px 44px 16px 17px;
+      border: 1px solid #cfc7b4; border-radius: 15px; background: white; color: var(--ink);
+      text-align: left; font-weight: 800; cursor: grab; box-shadow: 0 4px 0 #d8d0bc;
+      transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .term-card::after { content: "⋮⋮"; position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #9d9583; letter-spacing: -3px; }
+    .term-card:hover { transform: translateY(-2px); border-color: var(--tomato); box-shadow: 0 6px 0 #e7b3a5; }
+    .term-card.selected { border-color: var(--tomato); outline: 3px solid rgba(229,77,46,.2); background: #fff7f4; }
+    .term-card.dragging { opacity: .45; transform: rotate(-2deg); }
+    .term-card.matched { display: none; }
+
+    .definition {
+      min-height: 84px; padding: 15px 16px; border: 1px dashed #afa58e; border-radius: 16px;
+      background: #faf7ed; cursor: pointer; transition: .18s ease;
+    }
+    .definition p { margin: 0; font-size: .94rem; line-height: 1.45; }
+    .definition:hover, .definition:focus-visible { border-color: var(--basil); background: #f4fbf7; outline: none; }
+    .definition.over { border: 2px solid var(--basil); background: var(--basil-soft); transform: scale(1.012); }
+    .definition.wrong { animation: shake .34s ease; border-color: var(--tomato); background: #fff0eb; }
+    .definition.correct { border-style: solid; border-color: #8fc3a7; background: var(--basil-soft); cursor: default; }
+    .matched-label { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: var(--basil); font-weight: 850; font-size: .88rem; }
+    .matched-label::before { content: "✓"; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--basil); color: white; }
+
+    .tip { margin: 14px 18px 18px; padding: 13px 15px; border-left: 4px solid var(--mustard); background: #fff8df; color: #63562d; font-size: .88rem; line-height: 1.45; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; z-index: 10; transform: translate(-50%, 20px);
+      max-width: calc(100% - 32px); padding: 13px 19px; border-radius: 999px; color: white; background: var(--ink);
+      font-weight: 800; opacity: 0; pointer-events: none; box-shadow: 0 12px 30px rgba(0,0,0,.22); transition: .22s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.good { background: var(--basil); }
+    .toast.bad { background: var(--tomato-dark); }
+
+    .finish {
+      position: fixed; inset: 0; z-index: 20; display: none; place-items: center; padding: 20px;
+      background: rgba(24,32,29,.58); backdrop-filter: blur(6px);
+    }
+    .finish.show { display: grid; }
+    .finish-card { width: min(480px, 100%); padding: 30px; border-radius: 26px; background: var(--paper); text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,.28); }
+    .finish-icon { display: grid; place-items: center; width: 74px; height: 74px; margin: 0 auto 18px; border-radius: 50%; background: var(--mustard); font-size: 2.3rem; }
+    .finish h2 { margin: 0; font-family: Georgia, serif; font-size: 2rem; }
+    .finish p { color: var(--muted); line-height: 1.55; }
+    .primary { padding: 12px 20px; border: 0; border-radius: 999px; background: var(--tomato); color: white; font-weight: 850; cursor: pointer; }
+    .primary:hover { background: var(--tomato-dark); }
+
+    @keyframes shake { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+    @media (max-width: 760px) {
+      .app { width: min(100% - 20px, 620px); padding-top: 18px; }
+      .topbar { display: block; }
+      .restart { margin-top: 16px; }
+      .board { grid-template-columns: 1fr; }
+      .scoreboard { position: sticky; top: 8px; z-index: 5; }
+      .metric { padding: 10px 12px; }
+      .metric strong { font-size: 1.3rem; }
+      .panel { border-radius: 19px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Actividad de aprendizaje</p>
+        <h1>Costos a la carta</h1>
+        <p class="intro">Relaciona cada término de costos gastronómicos con su definición. Arrastra una tarjeta hasta la definición correcta o selecciona ambos elementos.</p>
+      </div>
+      <button class="restart" id="restartTop" type="button">↻ Nueva ronda</button>
+    </header>
+
+    <section class="scoreboard" aria-label="Resultados de la ronda">
+      <div class="metric"><span>Aciertos</span><strong id="score">0</strong></div>
+      <div class="metric"><span>Intentos</span><strong id="attempts">0</strong></div>
+      <div class="metric"><span>Progreso</span><strong id="progress">0/8</strong></div>
+    </section>
+
+    <section class="board">
+      <div class="panel">
+        <div class="panel-head"><h2>Términos</h2><span>Arrastra o selecciona</span></div>
+        <div class="cards" id="cards" aria-label="Términos para emparejar"></div>
+        <p class="tip">En celular, toca primero el término y luego la definición que consideres correcta.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Definiciones</h2><span>Encuentra su pareja</span></div>
+        <div class="definitions" id="definitions" aria-label="Definiciones disponibles"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="finish" id="finish" role="dialog" aria-modal="true" aria-labelledby="finishTitle">
+    <div class="finish-card">
+      <div class="finish-icon">🍽️</div>
+      <h2 id="finishTitle">¡Ronda completada!</h2>
+      <p id="finishText"></p>
+      <button class="primary" id="restartModal" type="button">Jugar otra ronda</button>
+    </div>
+  </div>
+
+  <script>
+    const pairs = [
+      { id: 'fijo', term: 'Costo fijo', definition: 'Permanece estable aunque cambie el nivel de producción o de ventas, como el arriendo mensual del local.' },
+      { id: 'variable', term: 'Costo variable', definition: 'Aumenta o disminuye según la cantidad de platos producidos, como los ingredientes utilizados.' },
+      { id: 'directo', term: 'Costo directo', definition: 'Puede identificarse y asignarse con facilidad a un plato o producto específico.' },
+      { id: 'indirecto', term: 'Costo indirecto', definition: 'Apoya la operación general, pero no se puede atribuir de forma sencilla a un único plato.' },
+      { id: 'prima', term: 'Materia prima', definition: 'Ingredientes e insumos que se transforman o integran directamente en la preparación.' },
+      { id: 'receta', term: 'Costo de receta', definition: 'Suma del valor de todos los ingredientes utilizados para elaborar una receta completa.' },
+      { id: 'porcion', term: 'Costo por porción', definition: 'Resultado de dividir el costo total de una receta entre el número de porciones que produce.' },
+      { id: 'merma', term: 'Merma', definition: 'Pérdida de peso, volumen o cantidad de un insumo durante su limpieza, almacenamiento o preparación.' }
+    ];
+
+    const state = { selected: null, attempts: 0, matched: new Set(), toastTimer: null };
+    const cards = document.querySelector('#cards');
+    const definitions = document.querySelector('#definitions');
+    const score = document.querySelector('#score');
+    const attempts = document.querySelector('#attempts');
+    const progress = document.querySelector('#progress');
+    const toast = document.querySelector('#toast');
+    const finish = document.querySelector('#finish');
+    const finishText = document.querySelector('#finishText');
+
+    function shuffle(list) {
+      const copy = [...list];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function render() {
+      state.selected = null; state.attempts = 0; state.matched.clear(); finish.classList.remove('show');
+      cards.innerHTML = ''; definitions.innerHTML = '';
+      shuffle(pairs).forEach(pair => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'term-card'; button.draggable = true;
+        button.dataset.id = pair.id; button.textContent = pair.term;
+        button.setAttribute('aria-label', `Término: ${pair.term}`);
+        button.addEventListener('click', () => selectTerm(pair.id));
+        button.addEventListener('dragstart', event => { state.selected = pair.id; button.classList.add('dragging'); event.dataTransfer.setData('text/plain', pair.id); });
+        button.addEventListener('dragend', () => button.classList.remove('dragging'));
+        cards.appendChild(button);
+      });
+      shuffle(pairs).forEach(pair => {
+        const target = document.createElement('div');
+        target.className = 'definition'; target.dataset.id = pair.id; target.tabIndex = 0;
+        target.innerHTML = `<p>${pair.definition}</p>`;
+        target.addEventListener('click', () => tryMatch(state.selected, pair.id, target));
+        target.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); tryMatch(state.selected, pair.id, target); } });
+        target.addEventListener('dragover', event => { event.preventDefault(); if (!state.matched.has(pair.id)) target.classList.add('over'); });
+        target.addEventListener('dragleave', () => target.classList.remove('over'));
+        target.addEventListener('drop', event => { event.preventDefault(); target.classList.remove('over'); tryMatch(event.dataTransfer.getData('text/plain'), pair.id, target); });
+        definitions.appendChild(target);
+      });
+      updateStats();
+    }
+
+    function selectTerm(id) {
+      if (state.matched.has(id)) return;
+      state.selected = state.selected === id ? null : id;
+      document.querySelectorAll('.term-card').forEach(card => card.classList.toggle('selected', card.dataset.id === state.selected));
+      if (state.selected) announce('Ahora selecciona su definición.', '');
+    }
+
+    function tryMatch(termId, definitionId, target) {
+      if (!termId || state.matched.has(definitionId)) return;
+      state.attempts += 1;
+      if (termId === definitionId) {
+        const pair = pairs.find(item => item.id === termId);
+        state.matched.add(termId);
+        target.classList.add('correct'); target.removeAttribute('tabindex');
+        target.insertAdjacentHTML('beforeend', `<div class="matched-label">${pair.term}</div>`);
+        document.querySelector(`.term-card[data-id="${termId}"]`).classList.add('matched');
+        state.selected = null;
+        announce('¡Buena pareja!', 'good');
+        if (state.matched.size === pairs.length) window.setTimeout(showFinish, 500);
+      } else {
+        target.classList.remove('wrong'); void target.offsetWidth; target.classList.add('wrong');
+        announce('Esa pareja no corresponde. Intenta de nuevo.', 'bad');
+      }
+      document.querySelectorAll('.term-card').forEach(card => card.classList.remove('selected'));
+      updateStats();
+    }
+
+    function updateStats() {
+      const correct = state.matched.size;
+      score.textContent = correct;
+      attempts.textContent = state.attempts;
+      progress.textContent = `${correct}/${pairs.length}`;
+    }
+
+    function announce(message, kind) {
+      window.clearTimeout(state.toastTimer);
+      toast.textContent = message; toast.className = `toast show ${kind}`;
+      state.toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    function showFinish() {
+      const accuracy = Math.round((pairs.length / Math.max(state.attempts, 1)) * 100);
+      finishText.textContent = `Lograste ${pairs.length} aciertos en ${state.attempts} intentos. Precisión: ${accuracy}%.`;
+      finish.classList.add('show');
+      document.querySelector('#restartModal').focus();
+    }
+
+    document.querySelector('#restartTop').addEventListener('click', render);
+    document.querySelector('#restartModal').addEventListener('click', render);
+    render();
+  </script>
+</body>
+</html>
